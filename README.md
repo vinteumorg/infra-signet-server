@@ -1,10 +1,10 @@
 # Signet Server
 
-The included script [signet-setup.py](./signet-setup.py) needs to be run by the administrator on a publicly reachable server to start the game.
+The included script [signet-server.py](./signet-server.py) needs to be run by the administrator on a publicly reachable server to start the game.
 
 The script requires a local installation of Bitcoin Core since it consumes the test framework as a library.
 
-Usage: `python signet-setup.py <path/to/bitcoin> <path/to/student/files> <path/for/bitcoin/datadir>`
+Usage: `python signet-server.py <path/to/bitcoin> <path/to/student/files> <path/for/bitcoin/datadir>`
 
 `<path/to/bitcoin>`: (required) Path to local installation of Bitcoin Core repository
 
