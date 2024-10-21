@@ -210,7 +210,7 @@ if REGTEST:
                 log.info(f"Generated block: {node.getblockcount()}")
                 sleep(1)
             except Exception as e:
-                log.warn(f"Couldn't generate block: {e}")
+                log.warning(f"Couldn't generate block: {e}")
     log.info(f"Starting regtest miner")
     Thread(target=generate_regtest).start()
 else:
@@ -245,7 +245,7 @@ def maybe_fund_wallets():
                 sleep(10)
                 continue
         except Exception as e:
-            log.warn(f"Failed to get miner wallet balance: {e}")
+            log.warning(f"Failed to get miner wallet balance: {e}")
             sleep(10)
             continue
         # Fund wallets
@@ -258,7 +258,7 @@ def maybe_fund_wallets():
             tx = miner_wallet.sendmany("", outputs)
             log.info(f"Sending tx from miner to all wallets: {tx}")
         except Exception as e:
-            log.warn(f"Failed to send tx from miner to all wallets: {e}")
+            log.warning(f"Failed to send tx from miner to all wallets: {e}")
         sleep(10)
 log.info(f"Starting fund wallets process")
 Thread(target=maybe_fund_wallets).start()
@@ -281,7 +281,7 @@ def tx_blizzard():
                 tx = wallet["rpc"].send(outputs={addr: amt}, options={"change_address": chng})
                 log.debug(f"Sending tx: from {wallet['name']} to {dest['name']}: {tx['txid']}")
         except Exception as e:
-            log.warn(f"Failed to send tx: from {wallet['name']} to {dest['name']}: {e}")
+            log.warning(f"Failed to send tx: from {wallet['name']} to {dest['name']}: {e}")
         sleep(10)
 log.info(f"Starting transaction blizzard")
 Thread(target=tx_blizzard).start()
