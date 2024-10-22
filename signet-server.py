@@ -15,6 +15,7 @@ from requests import get
 from pathlib import Path
 from threading import Thread
 from time import sleep
+from os.path import exists
 import json
 import os
 import subprocess
@@ -125,24 +126,43 @@ def get_wpkh(wallet_rpc):
             return item
     return None
 
-# Setup regtest test shell, create wallet and signet challenge
-log.info(f"Creating the signet challenge")
-log.debug(f"Starting regtest shell")
-shell = TestShell().setup(num_nodes=1, setup_clean_chain=True)
-node = shell.nodes[0]
-log.debug(f"Creating new wallet in regtest")
-node.createwallet(wallet_name="signer")
-descs = node.listdescriptors(private=True)["descriptors"]
-for desc in descs:
-    desc["timestamp"] = 0
-log.debug(f"Miner wallet descriptors: {json.dumps(desc)}")
-addr = node.getnewaddress(address_type="bech32")
-signet_challenge = node.getaddressinfo(addr)["scriptPubKey"]
-log.info(f"Created signet challenge: {signet_challenge}")
+# Test if we already created the signet challenge and miner wallet
+challenge_exists = exists(f"{CONF_DIR / 'challenge.dat'}")
+descriptors_exists = exists(f"{CONF_DIR / 'miner_wallet_descriptors.json'}")
 
-# Done with regtest
-log.debug(f"Done with regtest, shutting down")
-shell.shutdown()
+if challenge_exists and descriptors_exists:
+    restart = True
+    log.info("Loading config files")
+    with open(f"{CONF_DIR / 'challenge.dat'}", "r") as f:
+        signet_challenge = f.readlines()[0]
+    with open(f"{CONF_DIR / 'miner_wallet_descriptors.json'}", "r") as f:
+        descs = json.loads(f.read())
+    log.debug(f"Loaded signet challenge: {signet_challenge}")
+    log.debug(f"Loaded miner wallet descriptors: {descs}")
+else:
+    restart = False
+    # Setup regtest test shell, create wallet and signet challenge
+    log.info(f"Creating the signet challenge")
+    log.debug(f"Starting regtest shell")
+    shell = TestShell().setup(num_nodes=1, setup_clean_chain=True)
+    node = shell.nodes[0]
+    log.debug(f"Creating new wallet in regtest")
+    node.createwallet(wallet_name="signer")
+    descs = node.listdescriptors(private=True)["descriptors"]
+    for desc in descs:
+        desc["timestamp"] = 0
+    log.debug(f"Miner wallet descriptors: {json.dumps(descs)}")
+    addr = node.getnewaddress(address_type="bech32")
+    signet_challenge = node.getaddressinfo(addr)["scriptPubKey"]
+    # Save data
+    with open(f"{CONF_DIR / 'challenge.dat'}", "w") as f:
+        f.write(signet_challenge)
+    with open(f"{CONF_DIR / 'miner_wallet_descriptors.json'}", "w") as f:
+        f.write(json.dumps(descs))
+    log.info(f"Created signet challenge: {signet_challenge}")
+    # Done with regtest
+    log.debug(f"Done with regtest, shutting down")
+    shell.shutdown()
 
 # Start signet
 log.info(f"Starting signet mining node")
@@ -162,29 +182,19 @@ node = shell.nodes[0]
 node.createwallet(wallet_name="miner")
 miner_wallet = node.get_wallet_rpc("miner")
 log.debug(f"Importing descriptors")
-miner_wallet.importdescriptors(descs)
+result = miner_wallet.importdescriptors(descs)
+log.debug(f"result: {result}")
 miner_addr = miner_wallet.getnewaddress(address_type="bech32")
 log.debug(f"Will mine to address: {miner_addr}")
 
-# Add challenge to conf file for future restarts
-log.info(f"Creating bitcoin.conf file with challenge for future restarts")
-conf_file = node.datadir_path / "bitcoin.conf"
-with open(conf_file, "a") as f:
-    f.write(f"signetchallenge={signet_challenge}\n")
+log.debug(f"node datadir: {node.cli.datadir}")
 
-# Create wallets, cache p2wpkh descriptors and RPC wrappers
-log.info(f"Creating wallets")
-NUM_WALLETS = args.wallets
-log.debug(f"Will try to create {NUM_WALLETS} student wallets")
-wallets = []
-for i in range(NUM_WALLETS):
-    name = f"wallet_{i:03}"
-    log.debug(f"Creating wallet: {name}")
-    node.createwallet(wallet_name=name)
-    rpc = node.get_wallet_rpc(name)
-    desc = get_wpkh(rpc)
-    wallets.append({"name": name, "rpc": rpc, "desc": desc})
-    log.info(f"Created wallet: {name} {desc}")
+
+# Add challenge to conf file for future restarts
+# log.info(f"Creating bitcoin.conf file with challenge for future restarts")
+# conf_file = node.datadir_path / "bitcoin.conf"
+# with open(conf_file, "a") as f:
+#     f.write(f"signetchallenge={signet_challenge}\n")
 
 # Export config data
 log.info(f"Exporting config data")
@@ -194,10 +204,25 @@ with open(f"{CONF_DIR / 'bitcoin.conf'}", "w") as f:
     f.write(f"signetchallenge={signet_challenge}\n")
     f.write(f"addnode={EXTERNAL_IP}:{p2p_port(node.index)}\n")
 
-log.info(f"Exporting wallets data")
-with open(f"{CONF_DIR / 'wallets.txt'}", "w") as f:
-    for wallet in wallets:
-        f.write(f"{wallet['name']}: {wallet['desc']['desc']}\n")
+# Create wallets, cache p2wpkh descriptors and RPC wrappers
+NUM_WALLETS = args.wallets
+if NUM_WALLETS != 0:
+    log.info(f"Creating wallets")
+    log.debug(f"Will try to create {NUM_WALLETS} student wallets")
+    wallets = []
+    for i in range(NUM_WALLETS):
+        name = f"wallet_{i:03}"
+        log.debug(f"Creating wallet: {name}")
+        node.createwallet(wallet_name=name)
+        rpc = node.get_wallet_rpc(name)
+        desc = get_wpkh(rpc)
+        wallets.append({"name": name, "rpc": rpc, "desc": desc})
+        log.info(f"Created wallet: {name} {desc}")
+
+    log.info(f"Exporting wallets data")
+    with open(f"{CONF_DIR / 'wallets.txt'}", "w") as f:
+        for wallet in wallets:
+            f.write(f"{wallet['name']}: {wallet['desc']['desc']}\n")
 
 
 # Start mining in background subprocess
@@ -260,8 +285,10 @@ def maybe_fund_wallets():
         except Exception as e:
             log.warning(f"Failed to send tx from miner to all wallets: {e}")
         sleep(10)
-log.info(f"Starting fund wallets process")
-Thread(target=maybe_fund_wallets).start()
+
+if NUM_WALLETS != 0:
+    log.info(f"Starting fund wallets process")
+    Thread(target=maybe_fund_wallets).start()
 
 # Start a thread where random wallets send random TXs to each other
 def tx_blizzard():
@@ -283,5 +310,7 @@ def tx_blizzard():
         except Exception as e:
             log.warning(f"Failed to send tx: from {wallet['name']} to {dest['name']}: {e}")
         sleep(10)
-log.info(f"Starting transaction blizzard")
-Thread(target=tx_blizzard).start()
+
+if NUM_WALLETS != 0:
+    log.info(f"Starting transaction blizzard")
+    Thread(target=tx_blizzard).start()
