@@ -28,6 +28,14 @@ python signet-server.py [-h] [--datadir DATADIR] [--config CONFIG] [--regtest] [
 
 `--loglevel {debug,info,warning,error,critical}`: log level for the server messages (default: info).
 
+### Known limitations
+
+Operating Systems limit the amount of file descriptors a process can manage. This affacts creating too many wallets. MacOS is especially sensitive to this.
+
+You can check the limits with `ulimit -a`. Increasing the limit with `ulimit -n 8192` (or higher) can fix things, but I can't figure out a way to know how many descriptors you will need.
+
+See [this issue](https://github.com/bitcoin/bitcoin/issues/27732) for more info.
+
 ## Credits
 
 This is [forked](https://github.com/chaincodelabs/signet-wallet-project) from the work of [Matthew Zipkin](https://github.com/chaincodelabs/signet-wallet-project) for Chaincode Labs.
